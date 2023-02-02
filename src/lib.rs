@@ -113,7 +113,7 @@ impl<'a> ZipArchive<'a> {
         } = self;
         drop(tx);
 
-        let files: Vec<ZipFile> = thread_pool.install(|| rx.into_iter().par_bridge().collect());
+        let files: Vec<ZipFile> = rx.iter().collect();
 
         let mut offsets = Vec::new();
         for file in &files {
@@ -135,9 +135,13 @@ impl<'a> ZipArchive<'a> {
         // number of the disk with start
         destination.write_all(&0_u16.to_le_bytes()).unwrap();
         // Number of entries on this disk
-        destination.write_all(&files.len().to_le_bytes()).unwrap();
+        destination
+            .write_all(&(files.len() as u16).to_le_bytes())
+            .unwrap();
         // Number of entries
-        destination.write_all(&files.len().to_le_bytes()).unwrap();
+        destination
+            .write_all(&(files.len() as u16).to_le_bytes())
+            .unwrap();
         // Central dir size
         destination
             .write_all(&(central_dir_start - central_dir_offset).to_le_bytes())
