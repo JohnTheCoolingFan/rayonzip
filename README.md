@@ -35,6 +35,7 @@ zipper.add_file("input/file_that_goes_to_a_dir.txt", "test_dir/file_that_goes_to
 
 # First, open/create a file
 let mut file = File::create("output.zip").unwrap();
-# Now, write the zip archive data to a file
+# Now, write the zip archive data to a file.
+# This consumes the zip archive struct. Write to a buffer if you want to write to multiple destinations
 zipper.write(&mut file).unwrap();
 ```
