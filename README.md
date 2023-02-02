@@ -10,30 +10,30 @@ Example usage:
 use rayon::ThreadPoolBuilder;
 use rayonzip::ZipArchive;
 
-# Get amount of available threads for use
+// Get amount of available threads for use
 let threads = std::threads::available_parallelism.unwrap();
 
-# Build a rayon thread pool
+// Build a rayon thread pool
 let thread_pool = ThreadPoolBuilder::new().num_thread(threads.into()).build().unwrap();
 
-# Create a zp archive that'll use the thread pool to compress concurrently
+// Create a zp archive that'll use the thread pool to compress concurrently
 let mut zipper = ZipArchive::new(&thread_pool);
 
-# Add a file from filesystem
+// Add a file from filesystem
 zipper.add_file_from_fs("input/test_text_file.txt", "test_text_file.txt");
 
-# Add a file from binary slice
+// Add a file from binary slice
 zipper.add_file_from_slice(b"Hello, world!", "hello_world.txt");
 
-# Adding a directory and a file to it
+// Adding a directory and a file to it
 zipper.add_directory("test_dir");
 zipper.add_file("input/file_that_goes_to_a_dir.txt", "test_dir/file_that_goes_to_a_dir.txt");
 
-# Writing to a file
+// Writing to a file
 
-# First, open/create a file
+// First, open/create a file
 let mut file = File::create("output.zip").unwrap();
-# Now, write the zip archive data to a file.
-# This consumes the zip archive struct. Write to a buffer if you want to write to multiple destinations
+// Now, write the zip archive data to a file.
+// This consumes the zip archive struct. Write to a buffer if you want to write to multiple destinations
 zipper.write(&mut file).unwrap();
 ```
