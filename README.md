@@ -4,8 +4,6 @@ A library for creating zip files using rayon for thread control
 
 This library is inspired by [mtzip](https://crates.io/crates/mtzip), which manages concurrency by itself.
 
-After some tests, it's even slower than single-threaded program that uses [zip](https://crates.io/crates/zip) library. All tested on [rfmp](https://gitlab.com/JohnTheCoolingFan/rfmp).
-
 Example usage:
 
 ```rs
