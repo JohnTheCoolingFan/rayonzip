@@ -1,9 +1,10 @@
 use flate2::{read::DeflateEncoder, Compression, CrcReader};
-use rayon::ThreadPool;
+use rayon::{prelude::*, ThreadPool};
 use std::{
     fs::File,
-    io::{Cursor, Read, Seek, Write},
+    io::{Read, Seek, Write},
     path::Path,
+    sync::mpsc::{channel, Receiver, Sender},
 };
 
 const VERSION_NEEDED_TO_EXTRACT: u16 = 20;
@@ -25,18 +26,17 @@ pub enum CompressionType {
 #[derive(Debug)]
 pub struct ZipArchive<'a> {
     thread_pool: &'a ThreadPool,
-    filerecords_buf: Cursor<Vec<u8>>,
-    direntries_buf: Cursor<Vec<u8>>,
-    file_amount: u16,
+    tx: Sender<ZipFile>,
+    rx: Receiver<ZipFile>,
 }
 
 impl<'a> ZipArchive<'a> {
     pub fn new(thread_pool: &'a ThreadPool) -> Self {
+        let (tx, rx) = channel();
         Self {
             thread_pool,
-            filerecords_buf: Cursor::default(),
-            direntries_buf: Cursor::default(),
-            file_amount: 0,
+            tx,
+            rx,
         }
     }
 
@@ -79,35 +79,51 @@ impl<'a> ZipArchive<'a> {
     }
 
     pub fn add_file_from_fs(&mut self, fs_path: &Path, archived_name: &str) {
-        let compressed_file = self
-            .thread_pool
-            .install(|| Self::fs_file_to_archive_file(fs_path, archived_name));
-        self.add_zip_file(compressed_file);
+        let thread_tx = self.tx.clone();
+        let fs_path = fs_path.to_path_buf();
+        let archived_name = archived_name.to_string();
+        self.thread_pool.spawn(move || {
+            thread_tx
+                .send(Self::fs_file_to_archive_file(&fs_path, &archived_name))
+                .unwrap()
+        })
     }
 
     pub fn add_file_from_slice(&mut self, slice: &[u8], archived_name: &str) {
-        let compressed_file = self
-            .thread_pool
-            .install(|| Self::slice_to_archive_file(slice, archived_name));
-        self.add_zip_file(compressed_file);
+        let thread_tx = self.tx.clone();
+        let slice = slice.to_vec();
+        let archived_name = archived_name.to_string();
+        self.thread_pool.spawn(move || {
+            thread_tx
+                .send(Self::slice_to_archive_file(&slice, &archived_name))
+                .unwrap()
+        })
     }
 
     pub fn add_directory(&mut self, archived_name: &str) {
         let compressed_file = ZipFile::directory(archived_name.into());
-        self.add_zip_file(compressed_file);
+        self.tx.send(compressed_file).unwrap();
     }
 
-    fn add_zip_file(&mut self, file: ZipFile) {
-        self.file_amount += 1;
-        let offset = self.filerecords_buf.stream_position().unwrap() as u32;
-        file.to_bytes_filerecord(&mut self.filerecords_buf);
-        file.to_bytes_direntry(&mut self.direntries_buf, offset);
-    }
+    pub fn write<W: Write + Seek>(self, destination: &mut W) -> Result<(), std::io::Error> {
+        let Self {
+            thread_pool,
+            tx,
+            rx,
+        } = self;
+        drop(tx);
 
-    pub fn write<W: Write + Seek>(&self, destination: &mut W) -> Result<(), std::io::Error> {
-        destination.write_all(self.filerecords_buf.get_ref())?;
+        let files: Vec<ZipFile> = thread_pool.install(|| rx.into_iter().par_bridge().collect());
+
+        let mut offsets = Vec::new();
+        for file in &files {
+            offsets.push(destination.stream_position().unwrap() as u32);
+            file.to_bytes_filerecord(destination);
+        }
         let central_dir_offset = destination.stream_position()? as u32;
-        destination.write_all(self.direntries_buf.get_ref())?;
+        for (file, offset) in files.iter().zip(offsets.into_iter()) {
+            file.to_bytes_direntry(destination, offset)
+        }
         let central_dir_start = destination.stream_position()? as u32;
 
         // Signature
@@ -119,13 +135,9 @@ impl<'a> ZipArchive<'a> {
         // number of the disk with start
         destination.write_all(&0_u16.to_le_bytes()).unwrap();
         // Number of entries on this disk
-        destination
-            .write_all(&(self.file_amount).to_le_bytes())
-            .unwrap();
+        destination.write_all(&files.len().to_le_bytes()).unwrap();
         // Number of entries
-        destination
-            .write_all(&(self.file_amount).to_le_bytes())
-            .unwrap();
+        destination.write_all(&files.len().to_le_bytes()).unwrap();
         // Central dir size
         destination
             .write_all(&(central_dir_start - central_dir_offset).to_le_bytes())
