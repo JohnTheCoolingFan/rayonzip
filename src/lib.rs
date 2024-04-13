@@ -1,11 +1,12 @@
-use flate2::{read::DeflateEncoder, Compression, CrcReader};
-use rayon::{prelude::*, ThreadPool};
 use std::{
     fs::File,
     io::{Read, Seek, Write},
     path::Path,
     sync::mpsc::{channel, Receiver, Sender},
 };
+
+use flate2::{read::DeflateEncoder, Compression, CrcReader};
+use rayon::{prelude::*, ThreadPool};
 
 const VERSION_NEEDED_TO_EXTRACT: u16 = 20;
 const VERSION_MADE_BY: u16 = 0x033F;
