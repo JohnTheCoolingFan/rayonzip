@@ -6,7 +6,7 @@ use std::{
 };
 
 use flate2::{read::DeflateEncoder, Compression, CrcReader};
-use rayon::{prelude::*, ThreadPool};
+use rayon::ThreadPool;
 
 const VERSION_NEEDED_TO_EXTRACT: u16 = 20;
 const VERSION_MADE_BY: u16 = 0x033F;
@@ -108,7 +108,7 @@ impl<'a> ZipArchive<'a> {
 
     pub fn write<W: Write + Seek>(self, destination: &mut W) -> Result<(), std::io::Error> {
         let Self {
-            thread_pool,
+            thread_pool: _,
             tx,
             rx,
         } = self;
